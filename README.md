@@ -8,7 +8,7 @@ A 1D CNN for multi-label classification of 12-channel time-series signals, train
 
 This project implements a complete ML lifecycle for multi-label time-series classification:
 
-- **Data pipeline** — 21,799 twelve-channel signals, bandpass filtered, z-normalized, cached
+- **Data pipeline** — 19,624 twelve-channel signals, bandpass filtered, z-normalized, cached
 - **Model** — custom 1D ResNet-style CNN (<5M parameters), no pretrained weights
 - **Training** — weighted BCE loss for class imbalance, time-series augmentation
 - **Evaluation** — macro F1, per-class AUC, confusion matrix, on standardized splits
@@ -17,7 +17,34 @@ This project implements a complete ML lifecycle for multi-label time-series clas
 - **Full stack** — FastAPI backend, React dashboard, PostgreSQL + pgvector audit log
 - **Infrastructure** — Docker on Hugging Face Spaces
 
+---
 
+## Current Progress
+
+| Phase | Status | What's done |
+|-------|--------|-------------|
+| 1 | ✅ Complete | Dataset pipeline verified on 19,624 records |
+| 2 | 🚧 In progress | 1D CNN model, training loop, evaluation |
+| 3 | 📋 Planned | ONNX export + INT8 quantization |
+| 4 | 📋 Planned | C++ edge inference wrapper + MQTT |
+| 5 | 📋 Planned | FastAPI + React + PostgreSQL + Docker |
+
+**What's built and tested today:**
+- Reproducible data pipeline (download, filter, normalize, cache to `.npy`)
+- Config system with YAML → typed attribute access
+- Multi-label mapping from 71 SCP codes → 5 superclasses
+- Verified dataset stats: 19,624 records total
+
+**Verified preprocessed outputs** (cached as `.npy`, 4.4 GB total):
+
+| Split | Shape | Records |
+|-------|-------|---------|
+| train | `(15673, 5000, 12)` | 15,673 |
+| val | `(1967, 5000, 12)` | 1,967 |
+| test | `(1984, 5000, 12)` | 1,984 |
+
+**Class distribution** (consistent across all splits):
+- NORM 48% · CD 28% · STTC 25% · MI 12% · HYP 11.5%
 
 ---
 
@@ -31,14 +58,12 @@ Continuous monitoring generates continuous data, but cloud-based inference has t
 
 **Solution:** Run inference on the edge. Only the classification result is transmitted.
 
-
-
 ---
 
 ## Dataset: PTB-XL
 
 - **Source:** [PhysioNet](https://physionet.org/content/ptb-xl/1.0.3/)
-- **Size:** 21,799 records from 18,869 patients
+- **Size:** 21,799 raw records from 18,869 patients → 19,624 after label filtering
 - **Format:** 12-channel time-series, 10 seconds per record, 500 Hz (5000 timesteps per channel)
 - **Labels:** Expert-annotated, 71 fine-grained statements mapped to 5 diagnostic superclasses
 - **Splits:** Standardized 10-fold split (folds 1–8 train, 9 validation, 10 test)
@@ -59,7 +84,6 @@ Continuous monitoring generates continuous data, but cloud-based inference has t
 - **CODE** — 1.6M records, too large for free-tier compute, few published baselines
 - **CPSC 2018 / Chapman-Shaoxing** — smaller, less community standardization
 
-
 ---
 
 ## Labels: 5 Diagnostic Superclasses
@@ -74,7 +98,27 @@ Continuous monitoring generates continuous data, but cloud-based inference has t
 
 Labels are **multi-label** — a single record can belong to more than one class. This requires binary cross-entropy loss and per-class sigmoid outputs (not softmax).
 
+---
 
+## Architecture
+
+```text
+Raw signal (12 channels × 5000 timesteps)
+↓
+Bandpass filter (0.5–40 Hz) + z-normalization
+↓
+1D ResNet-style CNN (< 5M params)
+↓
+Sigmoid → 5 independent class probabilities
+↓
+ONNX export + INT8 quantization
+↓
+Edge inference (C++ / ONNX Runtime)
+↓
+MQTT alert → FastAPI → React dashboard
+↓
+PostgreSQL audit log
+```
 
 ---
 
@@ -95,8 +139,6 @@ Proposed mitigation:
 - Data collection partnerships
 
 See [`docs/domain_shift.md`](docs/domain_shift.md) for the full discussion.
-
-
 
 ---
 
@@ -123,8 +165,30 @@ bash scripts/preprocess_data.sh
 
 # 6. Train the model (Phase 2)
 python -m src.training.train
+```
 
+---
 
+## Project Structure
+
+```text
+ecg-edge/
+├── configs/                    Hyperparameters and paths
+├── data/
+│   ├── raw/                    Raw dataset (gitignored, ~2.6 GB)
+│   └── processed/              Cached .npy tensors (gitignored, ~4.4 GB)
+├── docs/                       Domain shift, architecture notes
+├── notebooks/                  Exploration and diagnostics
+├── scripts/                    Shell entry points
+├── src/
+│   ├── data/                   Download, label mapping, preprocessing, Dataset
+│   ├── models/                 1D ResNet CNN definition
+│   ├── training/               Training loop, evaluation, metrics
+│   └── utils/                  Config, logging, seeding
+├── tests/                      Unit tests for data pipeline
+├── requirements.txt
+└── README.md
+```
 
 ---
 
@@ -132,7 +196,7 @@ python -m src.training.train
 
 | Layer | Tool | Purpose |
 |-------|------|---------|
-| Dataset | PTB-XL | 21,799 labeled 12-channel records |
+| Dataset | PTB-XL | 19,624 labeled 12-channel records |
 | Language | Python 3.11 | Training, backend, orchestration |
 | Training | PyTorch | Custom 1D CNN, random initialization |
 | Preprocessing | WFDB, SciPy, NumPy | Load, filter, normalize |
@@ -146,8 +210,6 @@ python -m src.training.train
 | Frontend | React + Tailwind CSS | Signal + alert dashboard |
 | Database | PostgreSQL + pgvector | Audit log, version tracking |
 | Deployment | Docker on HF Spaces | Live demo |
-
-
 
 ---
 
@@ -164,9 +226,6 @@ python -m src.training.train
 | Official 10-fold split | Comparable to published baselines; no leakage |
 | Cached preprocessed `.npy` | Preprocessing runs once, training runs many times |
 
-
-
-
 ---
 
 ## Evaluation Metrics
@@ -178,9 +237,13 @@ python -m src.training.train
 
 ---
 
-## Status
+## Roadmap (5 Phases)
 
-Phase 1 complete. Currently implementing Phase 2 (model training and evaluation).
+- ☑ **Phase 1** — Data acquisition, preprocessing, reproducible pipeline
+- □ **Phase 2** — 1D ResNet CNN, training and evaluation
+- □ **Phase 3** — ONNX export + INT8 quantization
+- □ **Phase 4** — C++ edge inference wrapper + MQTT alerting
+- □ **Phase 5** — FastAPI + React + PostgreSQL + Docker deployment
 
 ---
 
