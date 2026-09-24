@@ -1,0 +1,118 @@
+# =============================================================================
+# ECG Edge — Default Configuration
+# =============================================================================
+# All paths, hyperparameters, and settings live here. Code reads from this
+# file; nothing is hardcoded.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Paths
+# -----------------------------------------------------------------------------
+paths:
+  project_root: "."
+  data_raw: "data/raw/ptb-xl"
+  data_processed: "data/processed"
+  models_dir: "models"
+  logs_dir: "logs"
+
+# -----------------------------------------------------------------------------
+# Dataset
+# -----------------------------------------------------------------------------
+dataset:
+  name: "PTB-XL"
+  version: "1.0.3"
+  sampling_rate: 500          # Hz (PTB-XL high-resolution version)
+  signal_length: 5000         # 10 seconds × 500 Hz
+  num_channels: 12            # 12-lead ECG
+  metadata_file: "ptbxl_database.csv"
+  statements_file: "scp_statements.csv"
+  # Official split from Wagner et al. (2020)
+  # folds 1-8 = train, fold 9 = val, fold 10 = test
+  fold_train_max: 8
+  fold_val: 9
+  fold_test: 10
+
+# -----------------------------------------------------------------------------
+# Labels
+# -----------------------------------------------------------------------------
+labels:
+  superclasses:
+    - NORM
+    - MI
+    - STTC
+    - CD
+    - HYP
+  # Minimum confidence (0-100) to accept an SCP code as a positive label
+  min_likelihood: 50
+
+# -----------------------------------------------------------------------------
+# Preprocessing
+# -----------------------------------------------------------------------------
+preprocessing:
+  bandpass_low: 0.5           # Hz — remove baseline wander
+  bandpass_high: 40.0         # Hz — remove powerline + muscle noise
+  filter_order: 5             # Butterworth order
+  normalize: "zscore"         # per-channel z-normalization
+  cache_format: "npy"         # save preprocessed tensors as .npy
+
+# -----------------------------------------------------------------------------
+# DataLoader
+# -----------------------------------------------------------------------------
+dataloader:
+  batch_size: 64
+  num_workers: 4
+  pin_memory: true
+  shuffle_train: true
+  shuffle_eval: false
+
+# -----------------------------------------------------------------------------
+# Augmentation (train split only)
+# -----------------------------------------------------------------------------
+augmentation:
+  noise:
+    enabled: true
+    probability: 0.5
+    std: 0.05
+  scaling:
+    enabled: true
+    probability: 0.5
+    min_factor: 0.9
+    max_factor: 1.1
+  time_shift:
+    enabled: true
+    probability: 0.5
+    max_shift: 250            # samples (±0.5 s at 500 Hz)
+
+# -----------------------------------------------------------------------------
+# Model (placeholder — architecture comes in Phase 2)
+# -----------------------------------------------------------------------------
+model:
+  name: "resnet1d"
+  num_classes: 5
+  in_channels: 12
+  dropout: 0.3
+
+# -----------------------------------------------------------------------------
+# Training (Phase 2)
+# -----------------------------------------------------------------------------
+training:
+  seed: 42
+  epochs: 50
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  optimizer: "adam"
+  scheduler: "onecycle"
+  early_stopping_patience: 7
+  loss: "bce_with_logits"
+  class_weighting: true       # inverse-frequency weights
+  grad_clip: 1.0
+
+# -----------------------------------------------------------------------------
+# Evaluation (Phase 2)
+# -----------------------------------------------------------------------------
+evaluation:
+  metrics:
+    - macro_f1
+    - per_class_auc
+    - confusion_matrix
+  threshold: 0.5              # sigmoid threshold for binary decisions

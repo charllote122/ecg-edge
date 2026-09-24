@@ -1,0 +1,37 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Data (never commit datasets or processed tensors)
+# Data — ignore contents, keep folder structure
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+*.npy
+*.pt
+*.onnx
+*.dat
+*.hea
+
+# Environment / secrets
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+# Editor tools
+.kilo/

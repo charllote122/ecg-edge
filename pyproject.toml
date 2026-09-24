@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ecg-edge"
+version = "0.1.0"
+description = "Multi-label time-series classification with edge deployment (PTB-XL benchmark)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Sofi Chemjor", email = "soficharllote50@gmail.com" }
+]
+keywords = ["deep-learning", "time-series", "multi-label", "edge-ai", "onnx", "ecg"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "numpy==1.26.4",
+    "pandas==2.2.2",
+    "scipy==1.13.0",
+    "wfdb==4.1.2",
+    "torch==2.3.0",
+    "torchvision==0.18.0",
+    "pyyaml==6.0.1",
+    "tqdm==4.66.4",
+    "matplotlib==3.9.0",
+    "scikit-learn==1.5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.2.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
