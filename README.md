@@ -1,21 +1,19 @@
 # ECG Edge — Multi-Label Time-Series Classification with Edge Deployment
 
-A 1D CNN for multi-label classification of 12-channel time-series signals, trained on the PTB-XL benchmark, optimized with ONNX + INT8, and deployed end-to-end with FastAPI, React, MQTT, and PostgreSQL.
+A 1D CNN for multi-label classification of 12-channel ECG signals, trained on the PTB-XL benchmark and optimized for deployment with ONNX and INT8 quantization. Edge inference and the application stack are planned next steps.
 
 ---
 
 ## Overview
 
-This project implements a complete ML lifecycle for multi-label time-series classification:
+This project builds a reproducible ML pipeline for multi-label ECG classification and edge deployment:
 
 - **Data pipeline** — 19,624 twelve-channel signals, bandpass filtered, z-normalized, cached
-- **Model** — custom 1D ResNet-style CNN (<5M parameters), no pretrained weights
+- **Model** — custom 1D ResNet-style CNN (3.86M parameters), no pretrained weights
 - **Training** — weighted BCE loss for class imbalance, time-series augmentation
 - **Evaluation** — macro F1, per-class AUC, confusion matrix, on standardized splits
-- **Optimization** — ONNX export + INT8 quantization (4× smaller, ~2× faster)
-- **Edge deployment** — C++ inference wrapper, MQTT alerts only
-- **Full stack** — FastAPI backend, React dashboard, PostgreSQL + pgvector audit log
-- **Infrastructure** — Docker on Hugging Face Spaces
+- **Optimization** — ONNX export + INT8 quantization (about 4× smaller)
+- **Planned deployment** — C++ inference wrapper, MQTT alerts, FastAPI, React, PostgreSQL, and Docker
 
 ---
 
@@ -23,17 +21,19 @@ This project implements a complete ML lifecycle for multi-label time-series clas
 
 | Phase | Status | What's done |
 |-------|--------|-------------|
-| 1 | ✅ Complete | Dataset pipeline verified on 19,624 records |
-| 2 | 🚧 In progress | 1D CNN model, training loop, evaluation |
-| 3 | 📋 Planned | ONNX export + INT8 quantization |
-| 4 | 📋 Planned | C++ edge inference wrapper + MQTT |
-| 5 | 📋 Planned | FastAPI + React + PostgreSQL + Docker |
+| 1 | Complete | Dataset pipeline verified on 19,624 records |
+| 2 | Complete | 1D ResNet CNN trained and evaluated; test macro F1 = 0.6895 |
+| 3 | Complete | ONNX export and INT8 quantization; 4× smaller with 0.16% macro F1 loss |
+| 4 | In progress | C++ edge inference wrapper + MQTT |
+| 5 | Planned | FastAPI + React + PostgreSQL + Docker |
 
-**What's built and tested today:**
+**Built and tested:**
 - Reproducible data pipeline (download, filter, normalize, cache to `.npy`)
 - Config system with YAML → typed attribute access
 - Multi-label mapping from 71 SCP codes → 5 superclasses
-- Verified dataset stats: 19,624 records total
+- 1D ResNet CNN with 3,861,893 parameters, trained on a Google Colab T4
+- ONNX FP32 export verified against PyTorch (maximum absolute difference < 1e-6)
+- INT8 ONNX model and full held-out test-set evaluation
 
 **Verified preprocessed outputs** (cached as `.npy`, 4.4 GB total):
 
@@ -45,6 +45,51 @@ This project implements a complete ML lifecycle for multi-label time-series clas
 
 **Class distribution** (consistent across all splits):
 - NORM 48% · CD 28% · STTC 25% · MI 12% · HYP 11.5%
+
+---
+
+## Test Set Results
+
+The best checkpoint was selected using validation macro F1. Results below are from the held-out test set (1,984 records), using a 0.5 decision threshold.
+
+| Metric | Value |
+|--------|-------|
+| **Macro F1** | **0.6895** |
+| Micro F1 | 0.7578 |
+| Weighted F1 | 0.7636 |
+
+| Class | F1 | Precision | Recall | AUC | Support |
+|-------|----|-----------|--------|-----|---------|
+| NORM | 0.8758 | 0.8180 | 0.9423 | 0.9462 | 954 |
+| MI | 0.5461 | 0.4591 | 0.6738 | 0.8964 | 233 |
+| STTC | 0.7697 | 0.6980 | 0.8577 | 0.9359 | 485 |
+| CD | 0.7665 | 0.7320 | 0.8043 | 0.9154 | 557 |
+| HYP | 0.4897 | 0.4185 | 0.5901 | 0.8433 | 222 |
+
+**Observations:**
+- Per-class AUC (0.84–0.95) exceeds thresholded F1, so ranking quality is stronger than the fixed 0.5 operating point suggests.
+- MI and HYP have lower F1, consistent with their lower support.
+- Training diagnostics show a widening train/validation gap; see [`notebooks/03_training_diagnostics.ipynb`](notebooks/03_training_diagnostics.ipynb).
+
+---
+
+## Quantization Results
+
+Benchmarked the PyTorch checkpoint and ONNX variants on the full test set (1,984 samples) using a Windows x86 CPU. Latency is hardware- and runtime-dependent.
+
+| Model | Size | Macro F1 | Latency |
+|-------|------|----------|---------|
+| PyTorch FP32 | 46.4 MB | 0.6895 | 96.9 ms/sample |
+| ONNX FP32 | 15.4 MB | 0.6895 | 126.5 ms/sample |
+| **ONNX INT8** | **3.9 MB** | **0.6884** | 1290.6 ms/sample |
+
+INT8 reduced ONNX model size by about 75% with a 0.0011 absolute macro F1 difference (about 0.16% relative). It was slower on this CPU, so quantization should be viewed as a size optimization here; latency benefits depend on hardware and execution provider.
+
+**Artifacts:**
+- `models/ecg_model_fp32.onnx` — framework-agnostic FP32 model
+- `models/ecg_model_int8.onnx` — quantized ONNX model
+- [`results/quantization_benchmark.json`](results/quantization_benchmark.json) — benchmark report
+- [`results/metrics.json`](results/metrics.json) — test-set metrics
 
 ---
 
@@ -107,17 +152,13 @@ Raw signal (12 channels × 5000 timesteps)
 ↓
 Bandpass filter (0.5–40 Hz) + z-normalization
 ↓
-1D ResNet-style CNN (< 5M params)
+1D ResNet-style CNN (3.86M params)
 ↓
 Sigmoid → 5 independent class probabilities
 ↓
 ONNX export + INT8 quantization
 ↓
-Edge inference (C++ / ONNX Runtime)
-↓
-MQTT alert → FastAPI → React dashboard
-↓
-PostgreSQL audit log
+Planned: edge inference (C++ / ONNX Runtime) → MQTT → application stack
 ```
 
 ---
@@ -130,7 +171,7 @@ The training data comes from a specific source population. Deployment targets ma
 - **Population characteristics** — signal morphology varies across demographics
 - **Equipment and signal quality** — clinical-grade vs consumer wearable
 
-**No public dataset exists for the target population** (e.g., Kenya / Africa / WHO regions). This is a real gap in medical AI. The model may not generalize without domain adaptation.
+Public datasets may not represent the intended deployment population (for example, populations and clinical settings in Kenya or elsewhere in Africa). This is a significant limitation: the model may not generalize without external validation and possible domain adaptation.
 
 Proposed mitigation:
 - Domain adaptation via fine-tuning on target-domain samples
@@ -138,7 +179,7 @@ Proposed mitigation:
 - Self-supervised pretraining on unlabeled target data
 - Data collection partnerships
 
-See [`docs/domain_shift.md`](docs/domain_shift.md) for the full discussion.
+These are proposed mitigations; no target-domain validation has been performed yet.
 
 ---
 
@@ -157,14 +198,22 @@ source .venv/bin/activate         # Linux/macOS
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Download the dataset (~2.6 GB extracted)
-bash scripts/download_data.sh
+# 4. Download and extract PTB-XL from PhysioNet into data/raw/ptb-xl/
+#    (The dataset is not included in this repository.)
 
 # 5. Preprocess (filter, normalize, cache as .npy)
-bash scripts/preprocess_data.sh
+python -m src.data.preprocess
 
-# 6. Train the model (Phase 2)
+# 6. Train the model
 python -m src.training.train
+
+# 7. Evaluate the best checkpoint on the test set
+python -m src.training.evaluate
+
+# 8. Export and quantize to ONNX INT8
+python -m src.export.to_onnx
+python -m src.export.quantize
+python -m src.export.benchmark
 ```
 
 ---
@@ -177,13 +226,16 @@ ecg-edge/
 ├── data/
 │   ├── raw/                    Raw dataset (gitignored, ~2.6 GB)
 │   └── processed/              Cached .npy tensors (gitignored, ~4.4 GB)
-├── docs/                       Domain shift, architecture notes
+├── docs/                       Reserved for project documentation
+├── models/                     Trained checkpoints and ONNX exports (gitignored)
 ├── notebooks/                  Exploration and diagnostics
-├── scripts/                    Shell entry points
+├── results/                    Test metrics and benchmark report
+├── scripts/                    Reserved for helper scripts (currently empty)
 ├── src/
-│   ├── data/                   Download, label mapping, preprocessing, Dataset
+│   ├── data/                   PTB-XL metadata, label mapping, preprocessing, Dataset
 │   ├── models/                 1D ResNet CNN definition
 │   ├── training/               Training loop, evaluation, metrics
+│   ├── export/                  ONNX export, quantization, benchmark
 │   └── utils/                  Config, logging, seeding
 ├── tests/                      Unit tests for data pipeline
 ├── requirements.txt
@@ -197,19 +249,19 @@ ecg-edge/
 | Layer | Tool | Purpose |
 |-------|------|---------|
 | Dataset | PTB-XL | 19,624 labeled 12-channel records |
-| Language | Python 3.11 | Training, backend, orchestration |
-| Training | PyTorch | Custom 1D CNN, random initialization |
+| Language | Python 3.10+ | Training and model export |
+| Training | PyTorch 2.6 | Custom 1D CNN, random initialization |
 | Preprocessing | WFDB, SciPy, NumPy | Load, filter, normalize |
 | Model | 1D ResNet CNN | <5M parameters |
 | Imbalance | Weighted BCE + augmentation | Handle minority classes |
 | Export | ONNX + ONNX Runtime | Framework-agnostic inference |
-| Quantization | INT8 | 4× smaller, ~2× faster |
-| Edge | C++ + ONNX Runtime | Deployed inference |
-| Messaging | MQTT | Alert-only communication |
-| Backend | FastAPI | HTTP + WebSocket |
-| Frontend | React + Tailwind CSS | Signal + alert dashboard |
-| Database | PostgreSQL + pgvector | Audit log, version tracking |
-| Deployment | Docker on HF Spaces | Live demo |
+| Quantization | ONNX Runtime INT8 | About 4× smaller than ONNX FP32 |
+| Edge | C++ + ONNX Runtime | Planned inference wrapper |
+| Messaging | MQTT | Planned alert-only communication |
+| Backend | FastAPI | Planned HTTP + WebSocket API |
+| Frontend | React + Tailwind CSS | Planned signal + alert dashboard |
+| Database | PostgreSQL + pgvector | Planned audit log and version tracking |
+| Deployment | Docker / Hugging Face Spaces | Planned deployment target |
 
 ---
 
@@ -225,6 +277,7 @@ ecg-edge/
 | Weighted loss + augmentation | Dataset is imbalanced; rewards minority-class accuracy |
 | Official 10-fold split | Comparable to published baselines; no leakage |
 | Cached preprocessed `.npy` | Preprocessing runs once, training runs many times |
+| Dynamic INT8 quantization | Reduces model size without retraining; latency gains depend on hardware |
 
 ---
 
@@ -239,11 +292,11 @@ ecg-edge/
 
 ## Roadmap (5 Phases)
 
-- ☑ **Phase 1** — Data acquisition, preprocessing, reproducible pipeline
-- □ **Phase 2** — 1D ResNet CNN, training and evaluation
-- □ **Phase 3** — ONNX export + INT8 quantization
-- □ **Phase 4** — C++ edge inference wrapper + MQTT alerting
-- □ **Phase 5** — FastAPI + React + PostgreSQL + Docker deployment
+- [x] **Phase 1** — Data acquisition, preprocessing, reproducible pipeline
+- [x] **Phase 2** — 1D ResNet CNN, training and evaluation (test macro F1: 0.6895)
+- [x] **Phase 3** — ONNX export + INT8 quantization (about 4× smaller, about 0.16% relative F1 loss)
+- [ ] **Phase 4** — C++ edge inference wrapper + MQTT alerting
+- [ ] **Phase 5** — FastAPI + React + PostgreSQL + Docker deployment
 
 ---
 
