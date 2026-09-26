@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecg-edge-db
+    environment:
+      POSTGRES_USER: ecg
+      POSTGRES_PASSWORD: ecg
+      POSTGRES_DB: ecg_edge
+    ports:
+      - "5434:5432"
+    volumes:
+      - ecg_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecg -d ecg_edge"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  ecg_pgdata:

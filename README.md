@@ -1,6 +1,6 @@
 # ECG Edge — Multi-Label Time-Series Classification with Edge Deployment
 
-A 1D CNN for multi-label classification of 12-channel ECG signals, trained on the PTB-XL benchmark and optimized for deployment with ONNX and INT8 quantization. Edge inference and the application stack are planned next steps.
+A 1D CNN for multi-label classification of 12-channel ECG signals, trained on the PTB-XL benchmark and optimized with ONNX and INT8 quantization. A Python ONNX Runtime edge demo publishes classification alerts over MQTT; the application stack is planned next.
 
 ---
 
@@ -13,7 +13,8 @@ This project builds a reproducible ML pipeline for multi-label ECG classificatio
 - **Training** — weighted BCE loss for class imbalance, time-series augmentation
 - **Evaluation** — macro F1, per-class AUC, confusion matrix, on standardized splits
 - **Optimization** — ONNX export + INT8 quantization (about 4× smaller)
-- **Planned deployment** — C++ inference wrapper, MQTT alerts, FastAPI, React, PostgreSQL, and Docker
+- **Edge demo** — Python ONNX Runtime inference, MQTT publisher, and live subscriber
+- **Planned application stack** — FastAPI, React, PostgreSQL, and Docker
 
 ---
 
@@ -24,7 +25,7 @@ This project builds a reproducible ML pipeline for multi-label ECG classificatio
 | 1 | Complete | Dataset pipeline verified on 19,624 records |
 | 2 | Complete | 1D ResNet CNN trained and evaluated; test macro F1 = 0.6895 |
 | 3 | Complete | ONNX export and INT8 quantization; 4× smaller with 0.16% macro F1 loss |
-| 4 | In progress | C++ edge inference wrapper + MQTT |
+| 4 | Complete | Python ONNX Runtime inference + MQTT publisher/subscriber demo |
 | 5 | Planned | FastAPI + React + PostgreSQL + Docker |
 
 **Built and tested:**
@@ -34,6 +35,7 @@ This project builds a reproducible ML pipeline for multi-label ECG classificatio
 - 1D ResNet CNN with 3,861,893 parameters, trained on a Google Colab T4
 - ONNX FP32 export verified against PyTorch (maximum absolute difference < 1e-6)
 - INT8 ONNX model and full held-out test-set evaluation
+- Python edge inference wrapper publishing predictions to MQTT, with a live subscriber receiving alerts
 
 **Verified preprocessed outputs** (cached as `.npy`, 4.4 GB total):
 
@@ -90,6 +92,36 @@ INT8 reduced ONNX model size by about 75% with a 0.0011 absolute macro F1 differ
 - `models/ecg_model_int8.onnx` — quantized ONNX model
 - [`results/quantization_benchmark.json`](results/quantization_benchmark.json) — benchmark report
 - [`results/metrics.json`](results/metrics.json) — test-set metrics
+
+---
+
+## Edge Inference + MQTT Demo
+
+The Phase 4 demo loads the INT8 ONNX model, runs inference on preprocessed test signals, and publishes classification results to an MQTT broker. A separate subscriber receives and prints the alerts. Only prediction metadata is sent; raw ECG signals are not published.
+
+Install the MQTT client dependency if it is not already available:
+
+```bash
+pip install paho-mqtt
+```
+
+With the dataset, preprocessed test arrays, and `models/ecg_model_int8.onnx` in place, run the subscriber in one terminal:
+
+```bash
+python -m edge.subscriber
+```
+
+Then run the demo in another terminal:
+
+```bash
+python -m edge.run_demo --n 10
+```
+
+The demo defaults to device ID `edge-001` and publishes to `ecg-edge/edge-001/predictions`. The subscriber listens to `ecg-edge/+/predictions`. Options include `--device-id` and `--delay`, for example `python -m edge.run_demo --device-id pi-01 --n 5 --delay 0.2`.
+
+In the recorded 10-sample run, the subscriber received all 10 alerts. Nine samples matched when judged by the demo's top-class comparison. On the remaining sample, the true label was CD, the top class was NORM, and CD was also present in the model's thresholded `detected` classes. This illustrates why multi-label output should be interpreted using the detected class set, not only the single top class. This small demo is an integration smoke test, not a model accuracy estimate; use the held-out test results above for evaluation.
+
+The demo uses the public `test.mosquitto.org:1883` broker without authentication. Do not send sensitive data or use this broker for production; production deployments need a private broker and appropriate transport security and authentication. The recorded inference latency was about 2.4–4.7 seconds per sample on the tested CPU. Latency on other hardware must be measured rather than inferred from this run.
 
 ---
 
@@ -158,7 +190,7 @@ Sigmoid → 5 independent class probabilities
 ↓
 ONNX export + INT8 quantization
 ↓
-Planned: edge inference (C++ / ONNX Runtime) → MQTT → application stack
+Python edge inference (ONNX Runtime) → MQTT alerts → planned application stack
 ```
 
 ---
@@ -227,6 +259,7 @@ ecg-edge/
 │   ├── raw/                    Raw dataset (gitignored, ~2.6 GB)
 │   └── processed/              Cached .npy tensors (gitignored, ~4.4 GB)
 ├── docs/                       Reserved for project documentation
+├── edge/                       ONNX Runtime inference and MQTT demo/subscriber
 ├── models/                     Trained checkpoints and ONNX exports (gitignored)
 ├── notebooks/                  Exploration and diagnostics
 ├── results/                    Test metrics and benchmark report
@@ -235,7 +268,7 @@ ecg-edge/
 │   ├── data/                   PTB-XL metadata, label mapping, preprocessing, Dataset
 │   ├── models/                 1D ResNet CNN definition
 │   ├── training/               Training loop, evaluation, metrics
-│   ├── export/                  ONNX export, quantization, benchmark
+│   ├── export/                 ONNX export, quantization, benchmark
 │   └── utils/                  Config, logging, seeding
 ├── tests/                      Unit tests for data pipeline
 ├── requirements.txt
@@ -256,8 +289,8 @@ ecg-edge/
 | Imbalance | Weighted BCE + augmentation | Handle minority classes |
 | Export | ONNX + ONNX Runtime | Framework-agnostic inference |
 | Quantization | ONNX Runtime INT8 | About 4× smaller than ONNX FP32 |
-| Edge | C++ + ONNX Runtime | Planned inference wrapper |
-| Messaging | MQTT | Planned alert-only communication |
+| Edge | Python + ONNX Runtime | INT8 inference demo |
+| Messaging | MQTT | Prediction-alert publisher and subscriber demo |
 | Backend | FastAPI | Planned HTTP + WebSocket API |
 | Frontend | React + Tailwind CSS | Planned signal + alert dashboard |
 | Database | PostgreSQL + pgvector | Planned audit log and version tracking |
@@ -295,7 +328,7 @@ ecg-edge/
 - [x] **Phase 1** — Data acquisition, preprocessing, reproducible pipeline
 - [x] **Phase 2** — 1D ResNet CNN, training and evaluation (test macro F1: 0.6895)
 - [x] **Phase 3** — ONNX export + INT8 quantization (about 4× smaller, about 0.16% relative F1 loss)
-- [ ] **Phase 4** — C++ edge inference wrapper + MQTT alerting
+- [x] **Phase 4** — Python ONNX Runtime edge inference + MQTT publisher/subscriber demo
 - [ ] **Phase 5** — FastAPI + React + PostgreSQL + Docker deployment
 
 ---
