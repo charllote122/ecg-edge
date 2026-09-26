@@ -35,3 +35,8 @@ Thumbs.db
 .idea/
 # Editor tools
 .kilo/
+
+# Trained models (binary, large)
+models/*.pt
+models/*.pth
+models/*.onnx
