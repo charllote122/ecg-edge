@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ecg-edge-db
+    environment:
+      POSTGRES_USER: ecg
+      POSTGRES_PASSWORD: ecg
+      POSTGRES_DB: ecg_edge
+    ports:
+      - "5434:5432"
+    volumes:
+      - ecg_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecg -d ecg_edge"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: ecg-edge-api
+    environment:
+      DATABASE_URL: postgresql+psycopg2://ecg:ecg@db:5432/ecg_edge
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ecg-edge-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  ecg_pgdata:

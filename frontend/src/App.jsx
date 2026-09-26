@@ -98,18 +98,7 @@ export default function App() {
             Real-time arrhythmia detection dashboard
           </span>
         </div>
-        <div className="mt-1 flex items-center gap-2 text-xs">
-          <span
-            className={`inline-block h-2 w-2 rounded-full ${
-              health?.status === 'ok' ? 'bg-green-500 animate-pulse' : 'bg-red-500'
-            }`}
-          />
-          <span className="text-neutral-500">
-            {health
-              ? `API ${health.status} · model ${health.model_loaded ? 'loaded' : 'missing'} · db ${health.db_connected ? 'ok' : 'down'}`
-              : 'connecting...'}
-          </span>
-        </div>
+        
       </header>
 
       {/* Stats grid */}
