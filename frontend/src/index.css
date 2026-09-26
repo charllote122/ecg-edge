@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+/* Custom base styles */
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #0a0a0a;
+  color: #f5f5f5;
+}

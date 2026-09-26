@@ -40,3 +40,4 @@ Thumbs.db
 models/*.pt
 models/*.pth
 models/*.onnx
+frontend/node_modules/
