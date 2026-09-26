@@ -61,7 +61,7 @@ def _resolve_paths(node: Any, project_root: Path) -> Any:
         return {k: _resolve_paths(v, project_root) for k, v in node.items()}
     if isinstance(node, list):
         return [_resolve_paths(v, project_root) for v in node]
-    if isinstance(node, str) and node.startswith(("data/", "models/", "logs/", "./")):
+    if isinstance(node, str) and node.startswith(("data/", "models/", "logs/", "./", ".")):
         return (project_root / node).resolve()
     return node
 
