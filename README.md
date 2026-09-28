@@ -38,8 +38,11 @@ The repository is no longer just a model-training sandbox. It includes the full 
 | FastAPI API | Complete |
 | PostgreSQL storage | Complete |
 | React dashboard | Complete |
+| Docker Compose (full stack) | Complete |
 
 ## Model and performance
+
+> Best checkpoint selected at epoch 10 by validation macro F1 (0.7084). Test macro F1 was 0.6895.
 
 ### Test metrics
 
@@ -170,25 +173,37 @@ npm run dev
 
 The dashboard reads from the API via the Vite proxy and shows recent alerts and alert statistics.
 
-### 6) Generate edge alerts
+### 6) Run the full edge → dashboard pipeline
 
-Open a second terminal and run the MQTT publisher demo:
+Open three terminals.
 
-```bash
-python -m edge.run_demo --n 10
-```
-
-Optional: forward those alerts into the API database:
+Terminal A — MQTT → API bridge (stores each alert in PostgreSQL):
 
 ```bash
 python -m edge.mqtt_to_api
 ```
 
-### 7) Watch live MQTT output
+Terminal B — edge inference demo (runs inference and publishes to MQTT):
+
+```bash
+python -m edge.run_demo --n 10
+```
+
+Terminal C — optional MQTT monitor (prints raw MQTT traffic, does not store):
 
 ```bash
 python -m edge.subscriber
 ```
+
+After the demo completes, refresh the dashboard at http://localhost:5173/ — the new alerts appear within 3 seconds.
+
+### 7) Optional: run the full stack in Docker
+
+```bash
+docker compose up -d
+```
+
+This starts PostgreSQL, the API, and the frontend. Open http://localhost:5173/ for the dashboard or http://localhost:8000/docs for the API documentation.
 
 ## Data and preprocessing
 
