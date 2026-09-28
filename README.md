@@ -26,19 +26,7 @@ The repository is no longer just a model-training sandbox. It includes the full 
 - PostgreSQL database setup for alert persistence
 - Vite + React dashboard in `frontend/`
 
-## Project status
 
-| Area | Status |
-|---|---|
-| PTB-XL preprocessing | Complete |
-| Model training and evaluation | Complete |
-| ONNX export and quantization | Complete |
-| Edge inference | Complete |
-| MQTT alerting | Complete |
-| FastAPI API | Complete |
-| PostgreSQL storage | Complete |
-| React dashboard | Complete |
-| Docker Compose (full stack) | Complete |
 
 ## Model and performance
 
